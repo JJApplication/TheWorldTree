@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
+
 	"twt/models"
 )
 
@@ -169,22 +171,49 @@ func (g *GitHubService) GetCommits(repositoryFullName string, limit int) ([]*mod
 	return commits, nil
 }
 
-func (g *GitHubService) SyncCommits(repositoryFullName string, limit int, db *models.DB) (int, error) {
-	commits, err := g.GetCommits(repositoryFullName, limit)
+func (g *GitHubService) SyncCommits(repoFullName string, limit int, db *models.DB) (int, error) {
+	syncedCount := 0
+	commits, err := g.GetCommits(repoFullName, limit)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get commits: %w", err)
 	}
 
-	syncedCount := 0
 	for _, commit := range commits {
 		if err := db.SaveCommit(commit); err != nil {
-			fmt.Printf("Failed to save commit %s: %v\n", commit.SHA, err)
+			log.Printf("Failed to save commit %s: %v\n", commit.SHA, err)
 			continue
 		}
 		syncedCount++
 	}
 
-	fmt.Printf("Successfully synced %d commits for repository: %s\n", syncedCount, repositoryFullName)
+	log.Printf("Successfully synced %d commits for repository: %s\n", syncedCount, repoFullName)
+	return syncedCount, nil
+}
+
+func (g *GitHubService) SyncCommitsAll(repoURLs []string, limit int, db *models.DB) (int, error) {
+	var fullNames []string
+	for _, repoURL := range repoURLs {
+		fullNames = append(fullNames, strings.TrimPrefix(repoURL, "https://github.com/"))
+	}
+
+	syncedCount := 0
+	for _, fullName := range fullNames {
+		commits, err := g.GetCommits(fullName, limit)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get commits: %w", err)
+		}
+
+		for _, commit := range commits {
+			if err := db.SaveCommit(commit); err != nil {
+				log.Printf("Failed to save commit %s: %v\n", commit.SHA, err)
+				continue
+			}
+			log.Printf("Successfully saved [%s] commit: %s\n", fullName, commit.SHA)
+			syncedCount++
+		}
+	}
+
+	log.Printf("Successfully synced %d commits for repository: %d\n", syncedCount, len(repoURLs))
 	return syncedCount, nil
 }
 
@@ -194,16 +223,16 @@ func (g *GitHubService) SyncRepositories(repoURLs []string, db *models.DB) (int,
 	for _, repoURL := range repoURLs {
 		repo, err := g.GetRepositoryInfo(repoURL)
 		if err != nil {
-			fmt.Printf("Failed to sync repository %s: %v\n", repoURL, err)
+			log.Printf("Failed to sync repository %s: %v\n", repoURL, err)
 			continue
 		}
 
 		if err := db.SaveRepository(repo); err != nil {
-			fmt.Printf("Failed to save repository %s: %v\n", repo.FullName, err)
+			log.Printf("Failed to save repository %s: %v\n", repo.FullName, err)
 			continue
 		}
 
-		fmt.Printf("Successfully synced repository: %s\n", repo.FullName)
+		log.Printf("Successfully synced repository: %s\n", repo.FullName)
 		syncedCount++
 	}
 

@@ -1,16 +1,62 @@
-[server]
-http_port = 8080
-grpc_port = 9090
+[server.http]
+host = "localhost"
+port = 8080
+enable = true
+
+[server.grpc]
+address = "/var/run/TwT.sock"
+enable = true
 
 [github]
 repositories = [
-    "https://github.com/gin-gonic/gin",
-    "https://github.com/go-git/go-git"
+    "https://github.com/JJApplication/Amitel",
+    "https://github.com/JJApplication/Apollo",
+    "https://github.com/JJApplication/ApolloCLI",
+    "https://github.com/JJApplication/ApolloUI",
+    "https://github.com/JJApplication/Atlas",
+    "https://github.com/JJApplication/Blog",
+    "https://github.com/JJApplication/Cerberus",
+    "https://github.com/JJApplication/Chaos",
+    "https://github.com/JJApplication/CookBook",
+    "https://github.com/JJApplication/Create-JJAPP",
+    "https://github.com/JJApplication/Demeter",
+    "https://github.com/JJApplication/DevDoc",
+    "https://github.com/JJApplication/DreamInBottle",
+    "https://github.com/JJApplication/Eos",
+    "https://github.com/JJApplication/Fushin",
+    "https://github.com/JJApplication/Gungnir",
+    "https://github.com/JJApplication/Heimdallr",
+    "https://github.com/JJApplication/Hephaestus",
+    "https://github.com/JJApplication/Hermes",
+    "https://github.com/JJApplication/Holding",
+    "https://github.com/JJApplication/Homeland",
+    "https://github.com/JJApplication/JJApp",
+    "https://github.com/JJApplication/JJGo",
+    "https://github.com/JJApplication/JJService",
+    "https://github.com/JJApplication/JJServiceFront",
+    "https://github.com/JJApplication/Jormungand",
+    "https://github.com/JJApplication/Mgek",
+    "https://github.com/JJApplication/MgekDoc",
+    "https://github.com/JJApplication/Monica",
+    "https://github.com/JJApplication/MySite",
+    "https://github.com/JJApplication/Nidavellir",
+    "https://github.com/JJApplication/NoEngineNG",
+    "https://github.com/JJApplication/octopusTree",
+    "https://github.com/JJApplication/octopusTwig",
+    "https://github.com/JJApplication/octopus_meta",
+    "https://github.com/JJApplication/Palace",
+    "https://github.com/JJApplication/Plume",
+    "https://github.com/JJApplication/RainbowBridge",
+    "https://github.com/JJApplication/Resume",
+    "https://github.com/JJApplication/Sandwich",
+    "https://github.com/JJApplication/TheWorldTree",
+    "https://github.com/JJApplication/Works",
+    "https://github.com/JJApplication/X",
 ]
-token = "your_github_token_here"
+token = "github_access_token"
 
 [database]
-path = "./data/repositories.db"
+path = "./twt.db"
 
 [log]
 level = "info"

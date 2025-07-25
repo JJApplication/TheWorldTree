@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
+
 	"twt/config"
 	"twt/models"
 	"twt/services"
@@ -19,6 +19,7 @@ type HTTPServer struct {
 }
 
 func NewHTTPServer(db *models.DB, githubService *services.GitHubService) *HTTPServer {
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	server := &HTTPServer{
 		db:            db,
@@ -35,14 +36,12 @@ func (s *HTTPServer) setupRoutes() {
 	{
 		api.GET("/repositories", s.getRepositories)
 		api.GET("/repositories/:owner/:name", s.getRepository)
-		api.POST("/sync", s.syncRepositories)
+		api.GET("/commits/:owner/:name", s.getCommits)
+		api.POST("/repositories/sync", s.syncRepositories)
+		api.POST("/commits/sync/:owner/:name", s.syncCommits)
+		api.POST("/commits/sync", s.syncCommitsAll)
 		api.GET("/health", s.healthCheck)
 	}
-
-	// Serve static files for a simple web UI
-	s.router.Static("/static", "./web/static")
-	s.router.LoadHTMLGlob("web/templates/*")
-	s.router.GET("/", s.indexPage)
 }
 
 func (s *HTTPServer) getRepositories(c *gin.Context) {
@@ -80,6 +79,26 @@ func (s *HTTPServer) getRepository(c *gin.Context) {
 	})
 }
 
+func (s *HTTPServer) getCommits(c *gin.Context) {
+	owner := c.Param("owner")
+	name := c.Param("name")
+	fullName := fmt.Sprintf("%s/%s", owner, name)
+	commits, err := s.db.GetCommits(fullName, 50, 0)
+	count, err := s.db.GetCommitCount(fullName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get repositories",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"commits": commits,
+		"total":   count,
+	})
+}
+
 type SyncRequest struct {
 	RepositoryURLs []string `json:"repository_urls"`
 }
@@ -114,6 +133,63 @@ func (s *HTTPServer) syncRepositories(c *gin.Context) {
 	})
 }
 
+func (s *HTTPServer) syncCommits(c *gin.Context) {
+	owner := c.Param("owner")
+	name := c.Param("name")
+	fullName := fmt.Sprintf("%s/%s", owner, name)
+
+	if fullName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No repository URLs provided",
+		})
+		return
+	}
+
+	syncedCount, err := s.githubService.SyncCommits(fullName, 50, s.db)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to sync commits",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":      fmt.Sprintf("Successfully synced %d commits", syncedCount),
+		"synced_count": syncedCount,
+	})
+}
+
+func (s *HTTPServer) syncCommitsAll(c *gin.Context) {
+	var req SyncRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// If no body provided, use config repositories
+		cfg := config.GetConfig()
+		req.RepositoryURLs = cfg.Github.Repositories
+	}
+
+	if len(req.RepositoryURLs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No repository URLs provided",
+		})
+		return
+	}
+
+	syncedCount, err := s.githubService.SyncCommitsAll(req.RepositoryURLs, 50, s.db)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to sync commits",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":      fmt.Sprintf("Successfully synced %d commits", syncedCount),
+		"synced_count": syncedCount,
+	})
+}
+
 func (s *HTTPServer) healthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
@@ -136,10 +212,11 @@ func (s *HTTPServer) indexPage(c *gin.Context) {
 
 func StartHTTPServer(db *models.DB, githubService *services.GitHubService) error {
 	cfg := config.GetConfig()
-	port := cfg.Server.HTTPPort
+	host := cfg.Server.HTTP.Host
+	port := cfg.Server.HTTP.Port
 
 	server := NewHTTPServer(db, githubService)
 
-	log.Printf("HTTP server starting on port %d", port)
-	return server.router.Run(":" + strconv.Itoa(port))
+	log.Printf("HTTP server starting on %s:%d", host, port)
+	return server.router.Run(fmt.Sprintf("%s:%d", host, port))
 }

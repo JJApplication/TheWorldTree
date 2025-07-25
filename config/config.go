@@ -2,8 +2,9 @@ package config
 
 import (
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"os"
+
+	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
@@ -14,8 +15,15 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	HTTPPort int `toml:"http_port"`
-	GRPCPort int `toml:"grpc_port"`
+	HTTP struct {
+		Host   string `toml:"host"`
+		Port   int    `toml:"port"`
+		Enable bool   `toml:"enable"`
+	} `toml:"http"`
+	GRPC struct {
+		Address string `toml:"address"`
+		Enable  bool   `toml:"enable"`
+	}
 }
 
 type GithubConfig struct {

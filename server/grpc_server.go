@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
-	"path/filepath"
-	"time"
+
 	"twt/config"
 	"twt/models"
 	"twt/proto"
@@ -104,37 +102,76 @@ func (s *GRPCServer) SyncRepositories(ctx context.Context, req *proto.SyncReposi
 	}, nil
 }
 
+func (s *GRPCServer) GetCommits(ctx context.Context, req *proto.GetCommitsRequest) (*proto.GetCommitsResponse, error) {
+	commits, err := s.db.GetCommits(req.RepositoryFullName, int(req.Limit), int(req.Offset))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commits: %w", err)
+	}
+
+	var protoCommits []*proto.Commit
+	for _, commit := range commits {
+		protoCommit := &proto.Commit{
+			Id:          int32(commit.ID),
+			Message:     commit.Message,
+			Sha:         commit.SHA,
+			AuthorName:  commit.AuthorName,
+			AuthorEmail: commit.AuthorEmail,
+			CommitDate:  timestamppb.New(commit.CommitDate),
+			SyncedAt:    timestamppb.New(commit.SyncedAt),
+		}
+		protoCommits = append(protoCommits, protoCommit)
+	}
+	return &proto.GetCommitsResponse{
+		Commits: protoCommits,
+		Total:   int32(len(protoCommits)),
+	}, nil
+}
+
+func (s *GRPCServer) SyncCommits(ctx context.Context, req *proto.SyncCommitsRequest) (*proto.SyncCommitsResponse, error) {
+	syncedCount, err := s.githubService.SyncCommits(req.RepositoryFullName, int(req.Limit), s.db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sync commits: %w", err)
+	}
+	return &proto.SyncCommitsResponse{
+		Message:     fmt.Sprintf("Successfully synced %d commits", syncedCount),
+		SyncedCount: int32(syncedCount),
+	}, nil
+}
+
+func (s *GRPCServer) SyncCommitsAll(ctx context.Context, req *proto.SyncCommitsAllRequest) (*proto.SyncCommitsResponse, error) {
+	repoURLs := req.RepositoryUrls
+	if len(repoURLs) == 0 {
+		// Use URLs from config if none provided
+		cfg := config.GetConfig()
+		repoURLs = cfg.Github.Repositories
+	}
+	syncedCount, err := s.githubService.SyncCommitsAll(repoURLs, int(req.Limit), s.db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sync commits: %w", err)
+	}
+	return &proto.SyncCommitsResponse{
+		Message:     fmt.Sprintf("Successfully synced %d repositories", syncedCount),
+		SyncedCount: int32(syncedCount),
+	}, nil
+}
+
 func StartGRPCServer(db *models.DB, githubService *services.GitHubService) error {
 	cfg := config.GetConfig()
-	port := cfg.Server.GRPCPort
+	address := cfg.Server.GRPC.Address
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	addr, err := net.ResolveUnixAddr("unix", address)
 	if err != nil {
-		return fmt.Errorf("failed to listen on port %d: %w", port, err)
+		return fmt.Errorf("resolve unix addr: %v", err)
+	}
+	udsLis, err := net.ListenUnix("unix", addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on address %s: %v", address, err)
 	}
 
 	s := grpc.NewServer()
 	grpcServer := NewGRPCServer(db, githubService)
 	proto.RegisterRepositoryServiceServer(s, grpcServer)
 
-	log.Printf("gRPC server starting on port %d", port)
-	return s.Serve(lis)
-}
-
-func initializeDatabase() (*models.DB, error) {
-	cfg := config.GetConfig()
-	dbPath := cfg.Database.Path
-
-	// Create directory if it doesn't exist
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create database directory: %w", err)
-	}
-
-	db, err := models.NewDB(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
-	}
-
-	return db, nil
+	log.Printf("gRPC server starting on: %s", address)
+	return s.Serve(udsLis)
 }

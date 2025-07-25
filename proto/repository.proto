@@ -12,6 +12,7 @@ service RepositoryService {
   rpc SyncRepositories(SyncRepositoriesRequest) returns (SyncRepositoriesResponse);
   rpc GetCommits(GetCommitsRequest) returns (GetCommitsResponse);
   rpc SyncCommits(SyncCommitsRequest) returns (SyncCommitsResponse);
+  rpc SyncCommitsAll(SyncCommitsAllRequest) returns (SyncCommitsResponse);
 }
 
 message Repository {
@@ -79,6 +80,11 @@ message GetCommitsResponse {
 
 message SyncCommitsRequest {
   string repository_full_name = 1;
+  int32 limit = 2; // default 50
+}
+
+message SyncCommitsAllRequest {
+  repeated string repository_urls = 1;
   int32 limit = 2; // default 50
 }
 
